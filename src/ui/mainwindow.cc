@@ -133,6 +133,11 @@ void MainWindow::build_services()
         m_progress.set_text({});
     });
 
+    m_remote_service->signal_pulled().connect([this] {
+        m_progress.set_text({});
+        show_message("Pulled.");
+    });
+
     m_operation_state->signal_changed().connect([this] {
         if (!m_operation_state->in_progress()) {
             m_operation_banner.hide();
@@ -427,6 +432,7 @@ void MainWindow::build_menu()
         add_item(go, "_Fetch", [this] {
             m_remote_service->fetch();
         });
+        add_item(go, "_Pull", sigc::mem_fun(*this, &MainWindow::pull));
         add_item(go, "_Push", sigc::mem_fun(*this, &MainWindow::push));
         go->append(*Gtk::manage(new Gtk::SeparatorMenuItem()));
         add_item(go, "Force Push (_Amend)…", sigc::mem_fun(*this, &MainWindow::amend_push));
@@ -499,6 +505,9 @@ void MainWindow::build_toolbar()
         add_button("document-save-symbolic", "Fetch from every remote, without changing your branch", [this] {
             m_remote_service->fetch();
         });
+        m_pull_button = add_button("go-down-symbolic",
+                                   "Pull: fetch, then integrate the upstream branch the way your git config says",
+                                   sigc::mem_fun(*this, &MainWindow::pull));
         m_push_button = add_button("go-up-symbolic", "Push the current branch to its remote", sigc::mem_fun(*this, &MainWindow::push));
         m_amend_push_button = add_button("go-top-symbolic",
                                          "Force push, replacing the remote branch — shows what would be destroyed first",
@@ -612,6 +621,11 @@ void MainWindow::update_actions()
     if (m_push_button) {
         m_push_button->set_sensitive(pushable);
         m_amend_push_button->set_sensitive(pushable);
+    }
+    if (m_pull_button) {
+        // Unlike a push, a pull cannot invent an upstream: there is nothing to
+        // integrate until one is configured.
+        m_pull_button->set_sensitive(pushable && !status.m_upstream.empty());
     }
 }
 
@@ -862,6 +876,19 @@ void MainWindow::push()
     const std::string remote = status.m_upstream.empty() ? "origin" : status.m_upstream.substr(0, status.m_upstream.find('/'));
 
     m_remote_service->push(remote, status.m_branch, set_upstream, false);
+}
+
+void MainWindow::pull()
+{
+    const StatusSnapshot &status = m_repository->status();
+    if (status.m_upstream.empty()) {
+        show_message("This branch has no upstream branch to pull from.", true);
+        return;
+    }
+
+    const std::string remote = status.m_upstream.substr(0, status.m_upstream.find('/'));
+    m_progress.set_text("Pulling from " + remote + "…");
+    m_remote_service->pull(remote, status.m_upstream);
 }
 
 void MainWindow::amend_push()

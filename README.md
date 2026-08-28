@@ -89,11 +89,20 @@ Needs gtkmm 3, gtksourceview 4, and `git` at runtime.
 norn                      # the current directory
 norn ~/Projects/some-repo # anywhere inside a repository
 norn --commit             # open ready to commit, here
+norn --pull               # fetch and integrate, in the terminal
+norn --push               # push the current branch, in the terminal
 norn --help               # the full list
 ```
 
 Any directory inside a working tree works; Norn asks git for the root rather than
 guessing, so linked worktrees and submodules resolve correctly.
+
+`--pull` and `--push` do not open a window at all: they run in the terminal, print
+progress to stderr, and exit non-zero if the operation fails, so they work in a
+script or over ssh. A pull integrates the upstream branch however *your*
+configuration says to — `branch.<name>.rebase`, then `pull.rebase`, then `pull.ff`
+— and nothing is passed on the command line to override it. Pull is also in the
+**Go** menu and the toolbar.
 
 `--commit` opens on the working copy with the cursor already in the commit message,
 skipping whichever tab was last in use. It exists to be bound to something: a

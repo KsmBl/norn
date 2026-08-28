@@ -86,6 +86,7 @@ private:
     void show_no_repository_offer();
 
     void push();
+    void pull();
     void amend_push();
     void on_force_push_preview_ready(const ForcePushPreview &preview);
     /*! Shows the plan editor, then starts the rebase if it is accepted. */
@@ -163,6 +164,7 @@ private:
     Gtk::Button *m_stage_button = nullptr;
     Gtk::Button *m_unstage_button = nullptr;
     Gtk::Button *m_discard_button = nullptr;
+    Gtk::Button *m_pull_button = nullptr;
     Gtk::Button *m_push_button = nullptr;
     Gtk::Button *m_amend_push_button = nullptr;
 

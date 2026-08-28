@@ -75,6 +75,17 @@ plus filesystem probes. Exit codes and porcelain output are the contract.
 pathspec also matches `weird1.txt`. Always feed paths as NUL-separated
 `:(literal)<path>` entries via `--pathspec-from-file=- --pathspec-file-nul`.
 
+**Pull is two commands, not one.** `git pull` straddles two lanes: the fetch is
+network work that can overlap anything, and the integration takes `index.lock` and
+must be serialised against every other write. A single job can only sit in one
+lane, so pull is run as `fetch` and then `merge`/`rebase`. Which of the two, and
+with which flags, is read from `branch.<name>.rebase`, `pull.rebase` and `pull.ff`
+— never passed on the command line, because that is the user's choice.
+
+**A failing command may have written its explanation to stdout.** `git merge`
+reports a conflict there, not on stderr, so a non-zero exit with an empty stderr
+is not a silent failure; look at the other stream before reporting one.
+
 **Always drain stdout and stderr, even when ignored.** Writing a large patch to
 stdin without draining deadlocks both processes on full pipes.
 

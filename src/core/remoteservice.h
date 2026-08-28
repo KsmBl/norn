@@ -55,6 +55,20 @@ public:
     void push(const std::string &remote, const std::string &branch, bool set_upstream, bool push_tags);
 
     /*!
+     * Fetches @p remote and integrates @p upstream_ref into the current branch.
+     *
+     * Run as two commands rather than one `git pull`, because pull straddles two
+     * lanes: the fetch is network work that can overlap everything else, and the
+     * integration takes index.lock and must be serialised against every other
+     * write. One job could only sit in one lane, and either choice is wrong.
+     *
+     * How the integration happens is read from the user's own configuration —
+     * `branch.<name>.rebase`, then `pull.rebase`, then `pull.ff` — and nothing is
+     * passed on the command line to override it. That choice is theirs.
+     */
+    void pull(const std::string &remote, const std::string &upstream_ref);
+
+    /*!
      * Works out what a force push would add and destroy.
      *
      * Fetches first, so the lease is taken against what the remote actually holds
@@ -81,6 +95,11 @@ public:
     {
         return m_signal_pushed;
     }
+    /*! The pull fetched and integrated cleanly. */
+    sigc::signal<void()> &signal_pulled()
+    {
+        return m_signal_pulled;
+    }
     sigc::signal<void(const ForcePushPreview &)> &signal_force_push_preview_ready()
     {
         return m_signal_force_push_preview_ready;
@@ -100,13 +119,28 @@ public:
     }
 
 private:
+    /*! How the user's configuration says a pull should integrate. */
+    struct PullStyle {
+        bool m_rebase = false;
+        /*! `pull.rebase = merges`: keep merge commits when replaying. */
+        bool m_rebase_merges = false;
+        /*! `pull.ff = only`: refuse anything that is not a fast-forward. */
+        bool m_ff_only = false;
+        /*! `pull.ff = false`: always record a merge commit. */
+        bool m_no_ff = false;
+    };
+
     void track_network(GitJob *job, const Glib::ustring &summary);
+    /*! Reads the pull-related configuration, then integrates. */
+    void read_pull_style(const std::string &upstream_ref);
+    void integrate(const std::string &upstream_ref, const PullStyle &style);
     void collect_preview_commits(ForcePushPreview preview);
 
     Repository &m_repository;
 
     sigc::signal<void()> m_signal_fetched;
     sigc::signal<void()> m_signal_pushed;
+    sigc::signal<void()> m_signal_pulled;
     sigc::signal<void(const ForcePushPreview &)> m_signal_force_push_preview_ready;
     sigc::signal<void(const Glib::ustring &, const Glib::ustring &)> m_signal_failed;
     sigc::signal<void(const Glib::ustring &, int, int)> m_signal_progress;

@@ -6,6 +6,7 @@
 
 #include "remoteservice.h"
 
+#include "gitenvironment.h"
 #include "repository.h"
 
 #include <utility>
@@ -135,6 +136,126 @@ void RemoteService::push(const std::string &remote, const std::string &branch, b
     job->signal_finished().connect([this, job] {
         if (job->succeeded()) {
             m_signal_pushed.emit();
+        }
+        m_repository.refresh_status();
+    });
+}
+
+void RemoteService::pull(const std::string &remote, const std::string &upstream_ref)
+{
+    GitCommand command(GitLane::Network, {"fetch", "--progress", remote});
+    command.m_wants_progress = true;
+    command.m_label = "Fetching " + remote;
+
+    GitJob *job = m_repository.runner().run(command);
+    track_network(job, "Could not fetch.");
+
+    job->signal_finished().connect([this, job, upstream_ref] {
+        if (!job->succeeded()) {
+            // track_network has already reported it; nothing is integrated.
+            m_repository.refresh_status();
+            return;
+        }
+        read_pull_style(upstream_ref);
+    });
+}
+
+void RemoteService::read_pull_style(const std::string &upstream_ref)
+{
+    // --list rather than --get-regexp: a branch name is a subsection and may hold
+    // regex metacharacters, and there is no escaping function to hand.
+    GitCommand command(GitLane::Read, {"config", "--list", "-z"});
+    command.m_label = "Reading pull configuration";
+
+    GitJob *job = m_repository.runner().run(command);
+    job->signal_finished().connect([this, job, upstream_ref] {
+        PullStyle style;
+
+        if (job->succeeded()) {
+            const std::string branch_key = "branch." + m_repository.status().m_branch + ".rebase";
+            std::string rebase;
+            std::string branch_rebase;
+            std::string fast_forward;
+
+            // Entries are "key\nvalue" runs separated by NUL. A later entry wins,
+            // which is what git itself resolves a repeated key to.
+            const std::string &data = job->stdout_data();
+            std::size_t start = 0;
+            while (start < data.size()) {
+                const std::size_t end = data.find('\0', start);
+                const std::string entry = data.substr(start, end == std::string::npos ? std::string::npos : end - start);
+                const std::size_t split = entry.find('\n');
+                if (split != std::string::npos) {
+                    const std::string key = entry.substr(0, split);
+                    const std::string value = entry.substr(split + 1);
+                    if (key == "pull.rebase") {
+                        rebase = value;
+                    } else if (key == "pull.ff") {
+                        fast_forward = value;
+                    } else if (key == branch_key) {
+                        branch_rebase = value;
+                    }
+                }
+                if (end == std::string::npos) {
+                    break;
+                }
+                start = end + 1;
+            }
+
+            // branch.<name>.rebase outranks pull.rebase, the way git resolves it.
+            const std::string effective = branch_rebase.empty() ? rebase : branch_rebase;
+            // "interactive" is treated as a plain rebase: there is no terminal to
+            // run the todo editor in, and silently opening one would hang the pull.
+            style.m_rebase = effective == "true" || effective == "merges" || effective == "interactive";
+            style.m_rebase_merges = effective == "merges";
+            style.m_ff_only = fast_forward == "only";
+            style.m_no_ff = fast_forward == "false";
+        }
+
+        integrate(upstream_ref, style);
+    });
+}
+
+void RemoteService::integrate(const std::string &upstream_ref, const PullStyle &style)
+{
+    std::vector<std::string> args;
+    if (style.m_rebase) {
+        args.emplace_back("rebase");
+        if (style.m_rebase_merges) {
+            args.emplace_back("--rebase-merges");
+        }
+    } else {
+        args.emplace_back("merge");
+        if (style.m_ff_only) {
+            args.emplace_back("--ff-only");
+        } else if (style.m_no_ff) {
+            args.emplace_back("--no-ff");
+        }
+        // --no-edit so git never tries to open an editor for the merge message.
+        args.emplace_back("--no-edit");
+    }
+    args.push_back(upstream_ref);
+
+    GitCommand command(GitLane::Write, args);
+    command.m_label = (style.m_rebase ? "Rebasing onto " : "Merging ") + upstream_ref;
+
+    GitJob *job = m_repository.runner().run(command);
+    job->signal_finished().connect([this, job] {
+        if (job->succeeded()) {
+            m_signal_pulled.emit();
+        } else {
+            // Stopping on a conflict lands here too. The repository state is what
+            // says which it was, so the message stays neutral and the caller reads
+            // the state rather than this text.
+            //
+            // git merge reports a conflict on stdout, not stderr, so a failure with
+            // nothing on stderr is not a silent one — the explanation is simply on
+            // the other stream.
+            Glib::ustring detail = job->error_text();
+            if (detail.empty()) {
+                detail = GitEnvironment::redact_text(trimmed(job->stdout_data()));
+            }
+            m_signal_failed.emit("Could not complete the pull.", detail);
         }
         m_repository.refresh_status();
     });

@@ -66,6 +66,16 @@ public:
     /*! Shows an inline, non-modal message across the top of the window. */
     void show_message(const Glib::ustring &text, bool is_error = false);
 
+    /*!
+     * Opens on the working copy with the cursor in the commit message, overriding
+     * the tab the window would otherwise restore.
+     *
+     * What `norn --commit` does: the point of that flag is a shortcut that lands
+     * the user one keystroke away from typing a message, so the remembered tab
+     * would be the wrong thing to honour.
+     */
+    void start_in_commit_mode();
+
 private:
     void build_services();
     void build_ui();
@@ -133,6 +143,8 @@ private:
     Gtk::Paned m_pane_splitter{Gtk::ORIENTATION_HORIZONTAL};
     Gtk::Box m_side_pane{Gtk::ORIENTATION_VERTICAL};
     Gtk::Notebook m_tabs;
+    /*! Page number of the working copy, or -1 with no repository open. */
+    int m_working_copy_page_num = -1;
 
     Gtk::Box m_working_copy_page{Gtk::ORIENTATION_VERTICAL};
     Gtk::Paned m_files_and_diff{Gtk::ORIENTATION_HORIZONTAL};

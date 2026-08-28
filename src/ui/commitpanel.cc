@@ -130,6 +130,11 @@ void CommitPanel::on_amend_toggled()
     update_state();
 }
 
+void CommitPanel::focus_message()
+{
+    m_subject.grab_focus();
+}
+
 void CommitPanel::clear()
 {
     m_subject.set_text({});

@@ -40,6 +40,7 @@ target_link_libraries(norncore PUBLIC PkgConfig::GTKMM PkgConfig::GIOUNIX)
 
 # Where the editor helper is installed, so the bridge can find it at runtime.
 target_compile_definitions(norncore PUBLIC NORN_LIBEXEC_DIR="${CMAKE_INSTALL_FULL_LIBEXECDIR}")
+target_compile_definitions(norncore PUBLIC NORN_VERSION="${PROJECT_VERSION}")
 
 add_executable(norn
     main.cc

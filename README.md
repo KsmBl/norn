@@ -88,10 +88,17 @@ Needs gtkmm 3, gtksourceview 4, and `git` at runtime.
 ```sh
 norn                      # the current directory
 norn ~/Projects/some-repo # anywhere inside a repository
+norn --commit             # open ready to commit, here
+norn --help               # the full list
 ```
 
 Any directory inside a working tree works; Norn asks git for the root rather than
 guessing, so linked worktrees and submodules resolve correctly.
+
+`--commit` opens on the working copy with the cursor already in the commit message,
+skipping whichever tab was last in use. It exists to be bound to something: a
+keyboard shortcut, or the **Commit Changes Here** action the desktop file adds to a
+folder's context menu in Thunar and other file managers.
 
 ## Tests
 

@@ -10,3 +10,10 @@ Categories=Development;RevisionControl;GTK;
 MimeType=inode/directory;
 Keywords=git;vcs;version control;commit;branch;merge;rebase;
 StartupNotify=true
+Actions=Commit;
+
+# A file manager offers this on a folder's context menu, and it is what a
+# "commit here" keyboard shortcut should launch.
+[Desktop Action Commit]
+Name=Commit Changes Here
+Exec=norn --commit %f

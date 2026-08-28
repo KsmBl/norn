@@ -252,7 +252,7 @@ void MainWindow::build_ui()
         m_commit_splitter.pack2(*m_commit_panel, false, false);
 
         m_working_copy_page.pack_start(m_commit_splitter, Gtk::PACK_EXPAND_WIDGET);
-        m_tabs.append_page(m_working_copy_page, "Working Copy");
+        m_working_copy_page_num = m_tabs.append_page(m_working_copy_page, "Working Copy");
 
         m_working_copy_view->signal_current_file_changed().connect(
             [this](const std::string &path, DiffSide side, DiffMode mode, bool conflicted) {
@@ -613,6 +613,18 @@ void MainWindow::update_actions()
         m_push_button->set_sensitive(pushable);
         m_amend_push_button->set_sensitive(pushable);
     }
+}
+
+void MainWindow::start_in_commit_mode()
+{
+    if (m_working_copy_page_num < 0 || !m_commit_panel) {
+        // No repository was found, so the window is showing the offer to open or
+        // initialise one; there is nothing to commit to yet.
+        return;
+    }
+
+    m_tabs.set_current_page(m_working_copy_page_num);
+    m_commit_panel->focus_message();
 }
 
 void MainWindow::show_message(const Glib::ustring &text, bool is_error)

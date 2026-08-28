@@ -41,6 +41,9 @@ public:
     /*! Re-reads the settings that affect this panel. */
     void apply_settings();
 
+    /*! Puts the cursor in the summary field, ready to type a message. */
+    void focus_message();
+
     /*! The user asked to commit and then push in one go. */
     sigc::signal<void()> &signal_commit_and_push_requested()
     {

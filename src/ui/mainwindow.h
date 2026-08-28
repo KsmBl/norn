@@ -96,6 +96,18 @@ private:
     /*! Answers git's request for an edited rebase todo. */
     void on_editor_sequence_requested(const std::string &file);
 
+    /*!
+      * Opens @p path in a second window belonging to the same application.
+      *
+      * Registering it matters: a window the application does not know about does
+      * not count towards the window it keeps running for, so closing the last
+      * registered one ends the main loop and takes the new window with it.
+      */
+     void open_in_new_window(const std::string &path);
+
+     /*! Opens @p path in a new window and disposes of this one. */
+     void replace_with(const std::string &path);
+
     void open_repository();
     void init_repository();
     void show_settings();

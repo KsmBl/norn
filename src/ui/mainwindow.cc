@@ -11,6 +11,7 @@
 
 #include <giomm/appinfo.h>
 #include <giomm/file.h>
+#include <glibmm/main.h>
 #include <glibmm/miscutils.h>
 #include <glibmm/spawn.h>
 
@@ -240,10 +241,9 @@ void MainWindow::build_ui()
         m_sidebar = std::make_unique<RepositorySidebar>(*m_repository, *m_ref_service);
         m_side_pane.pack_start(*m_sidebar, Gtk::PACK_EXPAND_WIDGET);
 
-        m_sidebar->signal_open_repository_requested().connect([](const std::string &path) {
+        m_sidebar->signal_open_repository_requested().connect([this](const std::string &path) {
             // One window per repository, so a worktree or submodule gets its own.
-            auto *window = new MainWindow(path);
-            window->show();
+            open_in_new_window(path);
         });
 
         m_working_copy_view = std::make_unique<WorkingCopyView>(*m_repository, *m_index_service, *m_conflict_service);
@@ -809,6 +809,39 @@ void MainWindow::open_in_editor(const std::string &path)
     });
 }
 
+void MainWindow::open_in_new_window(const std::string &path)
+{
+    auto *window = new MainWindow(path);
+
+    // Hand it to the application. Gtk::Application runs its main loop for as long
+    // as it has windows, and counts only the ones registered with it — so a window
+    // opened without this is invisible to that count. Closing the window that
+    // opened it then drops the count to zero, ends the loop, and tears down the
+    // new window too: the application appears to vanish without an error.
+    if (const Glib::RefPtr<Gtk::Application> application = get_application()) {
+        application->add_window(*window);
+    }
+
+    window->show();
+}
+
+void MainWindow::replace_with(const std::string &path)
+{
+    // The new window is registered before this one goes, so the application is
+    // never momentarily without a window.
+    open_in_new_window(path);
+    close();
+
+    // close() destroys the GtkWindow but not this C++ object, and everything it
+    // owns outlives it — the repository watcher above all, which would go on
+    // firing refreshes into a widget tree that no longer exists. It cannot be
+    // freed from inside its own call stack, so the deletion is parked on an idle,
+    // the same rule a finished GitJob follows.
+    Glib::signal_idle().connect_once([this] {
+        delete this;
+    });
+}
+
 void MainWindow::open_repository()
 {
     Gtk::FileChooserDialog dialog(*this, "Open Repository", Gtk::FILE_CHOOSER_ACTION_SELECT_FOLDER);
@@ -825,9 +858,7 @@ void MainWindow::open_repository()
         return;
     }
 
-    auto *window = new MainWindow(locator.toplevel());
-    window->show();
-    close();
+    replace_with(locator.toplevel());
 }
 
 void MainWindow::init_repository()
@@ -859,9 +890,7 @@ void MainWindow::init_repository()
         return;
     }
 
-    auto *window = new MainWindow(directory);
-    window->show();
-    close();
+    replace_with(directory);
 }
 
 void MainWindow::push()

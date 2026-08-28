@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    A commit on a branch: the dot norn draws in its history graph, with the branch
+    line it sits on and a branch leaving and merging back.
+
+    SPDX-License-Identifier: GPL-2.0-or-later
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+    <g fill="none" stroke="#3584e4" stroke-width="5" stroke-linecap="round">
+        <path d="M18 8 v48"/>
+        <path d="M18 24 q0 10 14 10 h4"/>
+        <path d="M46 34 q-14 0 -14 10 v4"/>
+    </g>
+    <g fill="#3584e4">
+        <circle cx="18" cy="14" r="7"/>
+        <circle cx="46" cy="34" r="7"/>
+        <circle cx="18" cy="50" r="7"/>
+    </g>
+</svg>

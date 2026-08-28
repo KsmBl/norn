@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Norn
+GenericName=Git Client
+Comment=Stage, commit and manage Git repositories
+Exec=norn %f
+Icon=de.synthelicz.Norn
+Terminal=false
+Categories=Development;RevisionControl;GTK;
+MimeType=inode/directory;
+Keywords=git;vcs;version control;commit;branch;merge;rebase;
+StartupNotify=true

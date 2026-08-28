@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<component type="desktop-application">
+    <id>de.synthelicz.Norn</id>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>GPL-2.0-or-later</project_license>
+
+    <name>Norn</name>
+    <summary>Stage, commit and manage Git repositories</summary>
+
+    <description>
+        <p>
+            A graphical Git client laid out like a file manager: a side pane listing
+            branches, remotes, tags, stashes, worktrees and submodules, and a main
+            area showing either the working copy or the commit history.
+        </p>
+        <p>Everyday work is covered end to end:</p>
+        <ul>
+            <li>Stage and unstage whole files, individual hunks, or single lines</li>
+            <li>Commit, amend, and push — including force pushing with a lease, showing exactly which commits would be destroyed first</li>
+            <li>Branches, merging, and conflict resolution with the right choices offered for each kind of conflict</li>
+            <li>A commit graph, with cherry-pick, revert and interactive rebase</li>
+            <li>Remotes, tags, stashes, linked worktrees and submodules</li>
+            <li>Editing files in place, with syntax highlighting</li>
+        </ul>
+    </description>
+
+    <launchable type="desktop-id">de.synthelicz.Norn.desktop</launchable>
+
+    <provides>
+        <binary>norn</binary>
+    </provides>
+
+    <categories>
+        <category>Development</category>
+        <category>RevisionControl</category>
+    </categories>
+
+    <releases>
+        <release version="0.2.0" date="2026-08-27">
+            <description>
+                <p>Rebuilt on GTK 3.</p>
+            </description>
+        </release>
+    </releases>
+</component>

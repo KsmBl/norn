@@ -89,6 +89,19 @@ is not a silent failure; look at the other stream before reporting one.
 **Always drain stdout and stderr, even when ignored.** Writing a large patch to
 stdin without draining deadlocks both processes on full pipes.
 
+**Never watch git's lock files.** `git status` takes `index.lock` to write back the
+refreshed stat cache, so a watcher that reports it schedules the next status, which
+takes the lock again: an untouched repository sat at roughly four git invocations a
+second. Every lock has a real file beside it whose own change is reported anyway.
+
+**A pane rebuilt on every refresh must first ask whether anything changed.** Most
+refreshes move no ref at all — saving a file does not. Build the new content, compare
+it against what is rendered, and return if they match; otherwise the scroll position
+is thrown away several times a second while the user is reading. Restoring scroll
+has to wait for a default-priority idle: immediately after the model is swapped the
+view has not been laid out, so the adjustment still describes an empty tree and any
+value set is clamped to zero.
+
 **Progress goes to stderr and uses `\r`, not `\n`.**
 
 ## gtkmm specifics worth remembering

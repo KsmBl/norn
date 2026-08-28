@@ -20,6 +20,27 @@ namespace
  * collected rather than acted on individually.
  */
 constexpr unsigned s_debounce_ms = 250;
+
+/*!
+ * True for git's own lock files, which are not repository state.
+ *
+ * This matters more than it looks. `git status` takes index.lock to write back the
+ * refreshed stat cache, so watching for it means every status refresh schedules the
+ * next one: the lock appears, the watcher fires, a status runs, and it takes the
+ * lock again. An untouched repository was left running about four git invocations a
+ * second for as long as the window stayed open. Every lock has a real file beside it
+ * whose own change is reported separately, so nothing is missed by ignoring these.
+ */
+bool is_lock_file(const Glib::RefPtr<Gio::File> &file)
+{
+    if (!file) {
+        return false;
+    }
+
+    const std::string name = file->get_basename();
+    static const std::string suffix = ".lock";
+    return name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
 }
 
 RepositoryWatcher::RepositoryWatcher(Repository &repository)
@@ -51,7 +72,10 @@ void RepositoryWatcher::watch_directory(const std::string &path)
 
     try {
         const Glib::RefPtr<Gio::FileMonitor> monitor = Gio::File::create_for_path(path)->monitor_directory();
-        monitor->signal_changed().connect([this](const Glib::RefPtr<Gio::File> &, const Glib::RefPtr<Gio::File> &, Gio::FileMonitorEvent) {
+        monitor->signal_changed().connect([this](const Glib::RefPtr<Gio::File> &file, const Glib::RefPtr<Gio::File> &, Gio::FileMonitorEvent) {
+            if (is_lock_file(file)) {
+                return;
+            }
             schedule_refresh();
         });
         m_monitors.push_back(monitor);

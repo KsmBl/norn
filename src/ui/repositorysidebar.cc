@@ -11,6 +11,7 @@
 
 #include <giomm/appinfo.h>
 #include <giomm/file.h>
+#include <glibmm/main.h>
 #include <glibmm/miscutils.h>
 
 #include <gtkmm/cellrendererpixbuf.h>
@@ -82,6 +83,12 @@ RepositorySidebar::RepositorySidebar(Repository &repository, RefService &ref_ser
     show_all_children();
 }
 
+RepositorySidebar::~RepositorySidebar()
+{
+    // The restore runs from an idle, which would otherwise fire into freed memory.
+    m_scroll_restore.disconnect();
+}
+
 void RepositorySidebar::build_ui()
 {
     m_store = Gtk::TreeStore::create(m_columns);
@@ -137,15 +144,19 @@ void RepositorySidebar::build_ui()
 
 void RepositorySidebar::rebuild()
 {
+
     std::string selected_key;
     if (const Gtk::TreeModel::iterator selected = m_view.get_selection()->get_selected()) {
         selected_key = (*selected)[m_columns.m_key];
     }
 
-    m_store->clear();
+    // Built into a fresh store rather than over the live one. Most refreshes
+    // change nothing here — a file saved in the working tree moves no ref — and
+    // rebuilding regardless is what threw the pane back to the top mid-scroll.
+    const Glib::RefPtr<Gtk::TreeStore> store = Gtk::TreeStore::create(m_columns);
 
-    const auto add_section = [this](const Glib::ustring &label) {
-        Gtk::TreeModel::Row row = *m_store->append();
+    const auto add_section = [this, &store](const Glib::ustring &label) {
+        Gtk::TreeModel::Row row = *store->append();
         row[m_columns.m_key] = "section:" + label.raw();
         row[m_columns.m_display] = label;
         row[m_columns.m_kind] = static_cast<int>(NodeKind::Section);
@@ -167,7 +178,7 @@ void RepositorySidebar::rebuild()
     for (const RefRecord &ref : m_ref_service.refs()) {
         switch (ref.m_kind) {
         case RefRecord::Kind::LocalBranch: {
-            Gtk::TreeModel::Row row = *m_store->append(branches.children());
+            Gtk::TreeModel::Row row = *store->append(branches.children());
             row[m_columns.m_key] = "branch:" + ref.m_short_name;
             Glib::ustring display = ref.m_short_name;
             if (ref.m_upstream_gone) {
@@ -194,7 +205,7 @@ void RepositorySidebar::rebuild()
         case RefRecord::Kind::RemoteBranch: {
             const std::string remote = ref.remote_name();
             if (remote_nodes.find(remote) == remote_nodes.end()) {
-                Gtk::TreeModel::Row node = *m_store->append(remotes.children());
+                Gtk::TreeModel::Row node = *store->append(remotes.children());
                 node[m_columns.m_key] = "remote:" + remote;
                 node[m_columns.m_display] = remote;
                 node[m_columns.m_icon] = "network-server-symbolic";
@@ -205,7 +216,7 @@ void RepositorySidebar::rebuild()
                 remote_nodes.emplace(remote, node);
             }
 
-            Gtk::TreeModel::Row row = *m_store->append(remote_nodes.at(remote).children());
+            Gtk::TreeModel::Row row = *store->append(remote_nodes.at(remote).children());
             row[m_columns.m_key] = "remote-branch:" + ref.m_short_name;
             // Already nested under the remote, so the prefix would only repeat it.
             const std::size_t slash = ref.m_short_name.find('/');
@@ -221,7 +232,7 @@ void RepositorySidebar::rebuild()
         }
 
         case RefRecord::Kind::Tag: {
-            Gtk::TreeModel::Row row = *m_store->append(tags.children());
+            Gtk::TreeModel::Row row = *store->append(tags.children());
             row[m_columns.m_key] = "tag:" + ref.m_short_name;
             row[m_columns.m_display] = ref.m_short_name;
             row[m_columns.m_icon] = tag_icon();
@@ -238,7 +249,7 @@ void RepositorySidebar::rebuild()
     }
 
     for (const StashRecord &stash : m_ref_service.stashes()) {
-        Gtk::TreeModel::Row row = *m_store->append(stashes.children());
+        Gtk::TreeModel::Row row = *store->append(stashes.children());
         row[m_columns.m_key] = "stash:" + stash.m_object_name;
         row[m_columns.m_display] = stash.m_message;
         row[m_columns.m_icon] = stash_icon();
@@ -251,7 +262,7 @@ void RepositorySidebar::rebuild()
     }
 
     for (const WorktreeRecord &worktree : m_ref_service.worktrees()) {
-        Gtk::TreeModel::Row row = *m_store->append(worktrees.children());
+        Gtk::TreeModel::Row row = *store->append(worktrees.children());
         row[m_columns.m_key] = "worktree:" + worktree.m_path;
 
         const std::string name = Glib::path_get_basename(worktree.m_path);
@@ -272,7 +283,7 @@ void RepositorySidebar::rebuild()
     }
 
     for (const SubmoduleRecord &submodule : m_ref_service.submodules()) {
-        Gtk::TreeModel::Row row = *m_store->append(submodules.children());
+        Gtk::TreeModel::Row row = *store->append(submodules.children());
         row[m_columns.m_key] = "submodule:" + submodule.m_path;
 
         row[m_columns.m_display] = submodule.m_is_uninitialised ? Glib::ustring::compose("%1 (not checked out)", submodule.m_path)
@@ -303,7 +314,66 @@ void RepositorySidebar::rebuild()
     label_with_count(worktrees, "Worktrees");
     label_with_count(submodules, "Submodules");
 
+    const std::string signature = signature_of(store);
+    if (signature == m_signature) {
+
+        // Identical to what is already on screen, so the scroll position, the
+        // expanders and the selection are all left exactly where the user put them.
+        return;
+    }
+    m_signature = signature;
+
+    const double scroll = m_scroller.get_vadjustment()->get_value();
+
+    m_store = store;
+    m_view.set_model(m_store);
+
     restore_view_state(selected_key);
+    restore_scroll(scroll);
+}
+
+std::string RepositorySidebar::signature_of(const Glib::RefPtr<Gtk::TreeStore> &store) const
+{
+    std::string signature;
+
+    const std::function<void(const Gtk::TreeModel::Children &, int)> walk = [&](const Gtk::TreeModel::Children &children, int depth) {
+        for (const Gtk::TreeModel::Row &row : children) {
+            // Every column the cell renderers read, so anything that would look
+            // different on screen counts as a change and anything else does not.
+            signature += std::to_string(depth);
+            signature += '\x1f' + static_cast<std::string>(row[m_columns.m_key]);
+            signature += '\x1f' + static_cast<Glib::ustring>(row[m_columns.m_display]).raw();
+            signature += '\x1f' + static_cast<Glib::ustring>(row[m_columns.m_icon]).raw();
+            signature += '\x1f' + static_cast<Glib::ustring>(row[m_columns.m_tooltip]).raw();
+            signature += '\x1f' + std::to_string(static_cast<int>(row[m_columns.m_weight]));
+            signature += '\x1f' + std::to_string(static_cast<bool>(row[m_columns.m_has_contents]));
+            signature += '\x1e';
+            walk(row.children(), depth + 1);
+        }
+    };
+    walk(store->children(), 0);
+
+    return signature;
+}
+
+void RepositorySidebar::restore_scroll(double value)
+{
+    if (value <= 0.0) {
+        return;
+    }
+
+    // Setting it now would be clamped away: the view has not been laid out against
+    // the new model yet, so the adjustment still describes an empty tree. A default
+    // priority idle runs after GTK's resize pass, by which point the range is real.
+    m_scroll_restore.disconnect();
+    m_scroll_restore = Glib::signal_idle().connect(
+        [this, value] {
+            const Glib::RefPtr<Gtk::Adjustment> adjustment = m_scroller.get_vadjustment();
+            const double furthest = std::max(0.0, adjustment->get_upper() - adjustment->get_page_size());
+            adjustment->set_value(std::min(value, furthest));
+            return false;
+        },
+        Glib::PRIORITY_DEFAULT_IDLE);
 }
 
 void RepositorySidebar::restore_view_state(const std::string &selected_key)

@@ -29,6 +29,7 @@ class RepositorySidebar : public Gtk::Box
 {
 public:
     RepositorySidebar(Repository &repository, RefService &ref_service);
+    ~RepositorySidebar() override;
 
     void create_branch();
     void create_tag();
@@ -96,8 +97,12 @@ private:
 
     void build_ui();
     void rebuild();
+    /*! Everything the pane renders, flattened, so an unchanged refresh is cheap to spot. */
+    std::string signature_of(const Glib::RefPtr<Gtk::TreeStore> &store) const;
     /*! Re-opens every row the user had not collapsed, and re-selects what was selected. */
     void restore_view_state(const std::string &selected_key);
+    /*! Puts the scroll position back once the view has been laid out again. */
+    void restore_scroll(double value);
     void on_row_expansion_changed(const Gtk::TreeModel::iterator &iterator, bool expanded);
     bool on_button_press(GdkEventButton *event);
     void show_context_menu(const Gtk::TreeModel::Row &row, GdkEventButton *event);
@@ -120,6 +125,10 @@ private:
     std::set<std::string> m_collapsed;
     /*! Set while rebuild() re-opens rows, so its own expansions are not recorded. */
     bool m_restoring_view_state = false;
+    /*! What the pane last rendered. An identical refresh is dropped rather than rebuilt. */
+    std::string m_signature;
+    /*! Owned, because it fires after this widget could have been destroyed. */
+    sigc::connection m_scroll_restore;
 
     sigc::signal<void(const std::string &)> m_signal_open_repository_requested;
 };
